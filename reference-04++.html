@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Application de Dessin avec Divs</title>
+    <style>
+        /* Style de la zone de dessin */
+        #drawingArea {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 2px solid #000;
+            margin: 20px auto;
+            background-color: #f9f9f9;
+        }
+
+        /* Style des ronds bleus */
+        .rond_bleu {
+            position: absolute;
+            width: 14px; /* Diamètre = 2 * rayon */
+            height: 14px;
+            background-color: blue;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        /* Style des segments des flèches */
+        .segment {
+            position: absolute;
+            background-color: black;
+            cursor: pointer;
+        }
+
+        /* Style de la pointe de la flèche */
+        .pointe {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 10px solid black;
+        }
+    </style>
+</head>
+<body>
+
+<div id="drawingArea">
+    <!-- Les ronds bleus seront ajoutés dynamiquement ici -->
+</div>
+
+<script>
+    // Tableau pour stocker toutes les formes
+    const formes = [];
+
+    // Compteur pour générer des identifiants uniques
+    let idCounter = 0;
+
+    // Variable pour gérer la création d'une flèche en cours
+    let flecheEnCours = null;
+
+    // Référence à la zone de dessin
+    const drawingArea = document.getElementById('drawingArea');
+
+    /**
+     * Génère un identifiant unique.
+     * @returns {number} Un identifiant unique.
+     */
+    function genererID() {
+        const id = idCounter++;
+        console.log(`genererID() appelé. ID généré : ${id}`);
+        return id;
+    }
+
+    /**
+     * Crée un rond bleu à des coordonnées spécifiques.
+     * @param {number} x - Coordonnée x du centre du rond.
+     * @param {number} y - Coordonnée y du centre du rond.
+     */
+    function creerRondBleu(x, y) {
+        console.log(`creerRondBleu() appelé avec x: ${x}, y: ${y}`);
+        const rond = document.createElement('div');
+        rond.classList.add('rond_bleu');
+        rond.style.left = `${x - 7}px`; // Centrage horizontal
+        rond.style.top = `${y - 7}px`;  // Centrage vertical
+        rond.dataset.id = genererID();
+
+        // Ajouter un écouteur d'événement pour le clic
+        rond.addEventListener('click', (event) => {
+            event.stopPropagation(); // Empêcher la propagation aux écouteurs globaux
+            handleClicRondBleu(rond);
+        });
+
+        // Ajouter le rond à la zone de dessin et au tableau des formes
+        drawingArea.appendChild(rond);
+        formes.push({
+            type: 'rond_bleu',
+            id: rond.dataset.id,
+            x: x,
+            y: y,
+            element: rond
+        });
+    }
+
+    /**
+     * Gère le clic sur un rond bleu pour créer une flèche.
+     * @param {HTMLElement} rond - L'élément rond bleu cliqué.
+     */
+    function handleClicRondBleu(rond) {
+        console.log(`handleClicRondBleu() appelé avec ID rond: ${rond.dataset.id}`);
+        const rondId = rond.dataset.id;
+        const rondObj = formes.find(f => f.id == rondId);
+
+        if (!flecheEnCours) {
+            // Première sélection : début de création d'une nouvelle flèche
+            flecheEnCours = {
+                depart: { x: rondObj.x, y: rondObj.y },
+                id: genererID(),
+                segments: {}
+            };
+
+            console.log(`Début de création d'une flèche avec ID: ${flecheEnCours.id}`);
+
+            // Créer le segment horizontal
+            const segmentHorizontal = document.createElement('div');
+            segmentHorizontal.classList.add('segment');
+            segmentHorizontal.style.height = '2px';
+            segmentHorizontal.style.backgroundColor = 'black';
+            segmentHorizontal.dataset.parentId = flecheEnCours.id;
+
+            // Ajouter un écouteur pour la suppression par double-clic
+            segmentHorizontal.addEventListener('dblclick', (event) => {
+                event.stopPropagation();
+                supprimerFleche(flecheEnCours.id);
+            });
+
+            // Créer le segment vertical
+            const segmentVertical = document.createElement('div');
+            segmentVertical.classList.add('segment');
+            segmentVertical.style.width = '2px';
+            segmentVertical.style.backgroundColor = 'black';
+            segmentVertical.dataset.parentId = flecheEnCours.id;
+            segmentVertical.style.position = 'absolute';
+
+            // Ajouter un écouteur pour la suppression par double-clic
+            segmentVertical.addEventListener('dblclick', (event) => {
+                event.stopPropagation();
+                supprimerFleche(flecheEnCours.id);
+            });
+
+            // Créer la pointe de la flèche
+            const pointe = document.createElement('div');
+            pointe.classList.add('pointe');
+            pointe.style.display = 'none'; // Affichée uniquement lorsque la flèche est finalisée
+            pointe.dataset.parentId = flecheEnCours.id;
+
+            // Ajouter les segments et la pointe à la zone de dessin
+            drawingArea.appendChild(segmentHorizontal);
+            drawingArea.appendChild(segmentVertical);
+            drawingArea.appendChild(pointe);
+
+            // Stocker les segments dans l'objet flecheEnCours
+            flecheEnCours.segments = {
+                horizontal: segmentHorizontal,
+                vertical: segmentVertical,
+                pointe: pointe
+            };
+
+            // Ajouter des écouteurs de mouvement et de clic global
+            document.addEventListener('mousemove', suivreSouris);
+            document.addEventListener('click', finaliserFleche);
+        } else {
+            // Deuxième sélection : finalisation de la flèche
+            if (flecheEnCours.depart.x === rondObj.x && flecheEnCours.depart.y === rondObj.y) {
+                // SCENARIO 2 : Même rond, ne pas créer la flèche
+                console.log('Deux clics sur le même rond. La flèche ne sera pas créée.');
+                supprimerFlecheTemporaire();
+                return;
+            }
+
+            // Définir le point d'arrivée de la flèche
+            flecheEnCours.arrivee = { x: rondObj.x, y: rondObj.y };
+            mettreAJourFleche(flecheEnCours.depart, flecheEnCours.arrivee, flecheEnCours.segments);
+            console.log(`Flèche finalisée avec ID: ${flecheEnCours.id}`);
+
+            // Ajouter la flèche au tableau des formes
+            formes.push({
+                type: 'fleche',
+                id: flecheEnCours.id,
+                depart: flecheEnCours.depart,
+                arrivee: flecheEnCours.arrivee,
+                segments: flecheEnCours.segments
+            });
+
+            // Réinitialiser flecheEnCours
+            flecheEnCours = null;
+
+            // Supprimer les écouteurs de mouvement et de clic
+            document.removeEventListener('mousemove', suivreSouris);
+            document.removeEventListener('click', finaliserFleche);
+        }
+    }
+
+    /**
+     * Suit la position de la souris pour mettre à jour la flèche en cours de création.
+     * @param {MouseEvent} event - L'événement de mouvement de la souris.
+     */
+    function suivreSouris(event) {
+        console.log(`suivreSouris() appelé avec position: (${event.clientX}, ${event.clientY})`);
+        if (!flecheEnCours) return;
+
+        const rect = drawingArea.getBoundingClientRect();
+        const sourisX = event.clientX - rect.left;
+        const sourisY = event.clientY - rect.top;
+
+        // Mettre à jour les segments de la flèche en cours
+        mettreAJourFleche(flecheEnCours.depart, { x: sourisX, y: sourisY }, flecheEnCours.segments);
+    }
+
+    /**
+     * Finalise la flèche lors du deuxième clic.
+     * @param {MouseEvent} event - L'événement de clic.
+     */
+    function finaliserFleche(event) {
+        console.log(`finaliserFleche() appelé avec cible: ${event.target.tagName}`);
+        // Si le clic se fait sur un rond bleu, il est déjà géré par l'écouteur du rond
+        // Sinon, supprimer la flèche temporaire
+        if (!event.target.classList.contains('rond_bleu')) {
+            console.log('Clique en dehors d\'un rond bleu. Flèche temporaire supprimée.');
+            supprimerFlecheTemporaire();
+        }
+    }
+
+    /**
+     * Met à jour les positions des segments de la flèche.
+     * @param {Object} depart - Point de départ {x, y}.
+     * @param {Object} arrivee - Point d'arrivée {x, y}.
+     * @param {Object} segments - Segments de la flèche {horizontal, vertical, pointe}.
+     */
+    function mettreAJourFleche(depart, arrivee, segments) {
+        console.log(`mettreAJourFleche() appelé avec depart: (${depart.x}, ${depart.y}), arrivee: (${arrivee.x}, ${arrivee.y})`);
+        const xf1 = depart.x;
+        const yf1 = depart.y;
+        const xf2 = arrivee.x;
+        const yf2 = arrivee.y;
+
+        // Déterminer les coordonnées intermediaires pour former un "L"
+        const xfd = xf2;
+        const yfd = yf1;
+
+        // Calcul des dimensions pour les segments
+        const largeurHorizontal = Math.abs(xfd - xf1);
+        const directionHorizontal = xfd >= xf1 ? 1 : -1;
+
+        const hauteurVerticale = Math.abs(yf2 - yfd);
+        const directionVerticale = yf2 >= yfd ? 1 : -1;
+
+        // Mettre à jour le segment horizontal
+        segments.horizontal.style.left = `${Math.min(xf1, xfd)}px`;
+        segments.horizontal.style.top = `${yf1 - 1}px`; // Centré verticalement
+        segments.horizontal.style.width = `${largeurHorizontal}px`;
+        segments.horizontal.style.height = `2px`;
+
+        // Mettre à jour le segment vertical
+        segments.vertical.style.left = `${xfd - 1}px`; // Centré horizontalement
+        segments.vertical.style.top = `${yfd}px`;
+		if(directionVerticale>0)
+		{
+			segments.vertical.style.top = `${yf1}px`;
+		}
+		else
+		{
+			segments.vertical.style.top = `${yf2}px`;
+		}
+        segments.vertical.style.height = `${hauteurVerticale}px`;
+        segments.vertical.style.width = `2px`;
+
+        // Positionner la pointe de la flèche
+        segments.pointe.style.left = `${xf2 - 5}px`; // Centré horizontalement
+        segments.pointe.style.top = `${yf2}px`;
+        segments.pointe.style.borderTop = '10px solid black';
+        segments.pointe.style.display = 'block';
+    }
+
+    /**
+     * Supprime une flèche entière en fonction de son identifiant.
+     * @param {number} id - Identifiant unique de la flèche à supprimer.
+     */
+    function supprimerFleche(id) {
+        console.log(`supprimerFleche() appelé avec ID: ${id}`);
+        // Trouver l'index de la flèche dans le tableau des formes
+        const index = formes.findIndex(f => f.id == id && f.type === 'fleche');
+        if (index !== -1) {
+            const fleche = formes[index];
+            // Supprimer les segments et la pointe du DOM
+            fleche.segments.horizontal.remove();
+            fleche.segments.vertical.remove();
+            fleche.segments.pointe.remove();
+            // Supprimer la flèche du tableau des formes
+            formes.splice(index, 1);
+            console.log(`Flèche avec ID: ${id} supprimée.`);
+        } else {
+            console.log(`Flèche avec ID: ${id} non trouvée.`);
+        }
+    }
+
+    /**
+     * Supprime la flèche temporaire en cours de création.
+     */
+    function supprimerFlecheTemporaire() {
+        console.log(`supprimerFlecheTemporaire() appelé`);
+        if (flecheEnCours && flecheEnCours.segments) {
+            flecheEnCours.segments.horizontal.remove();
+            flecheEnCours.segments.vertical.remove();
+            flecheEnCours.segments.pointe.remove();
+            flecheEnCours = null;
+            // Supprimer les écouteurs de mouvement et de clic
+            document.removeEventListener('mousemove', suivreSouris);
+            document.removeEventListener('click', finaliserFleche);
+            console.log('Flèche temporaire supprimée.');
+        }
+    }
+
+    /**
+     * Initialise l'application en créant trois ronds bleus.
+     */
+    function init() {
+        console.log(`init() appelé`);
+
+        // Positions prédéfinies pour les 3 ronds bleus (non alignés)
+        const positions = [
+            { x: 100, y: 100 },
+            { x: 400, y: 300 },
+            { x: 200, y: 500 }
+        ];
+
+        // Créer les 3 ronds bleus
+        positions.forEach(pos => {
+            creerRondBleu(pos.x, pos.y);
+        });
+    }
+
+    // Appel de la fonction d'initialisation une fois le DOM chargé
+    document.addEventListener('DOMContentLoaded', init);
+</script>
+
+</body>
+</html>
